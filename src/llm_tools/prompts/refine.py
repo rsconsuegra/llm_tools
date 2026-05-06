@@ -12,11 +12,15 @@ REFINE_INITIAL_PROMPT = ChatPromptTemplate.from_messages(
             "user",
             "{context_block}"
             "NARRATIVE TEXT:\n\n{text}\n\n"
-            "Produce a summary with the following sections:\n"
-            "1) What happens (dense narrative recap)\n"
-            "2) Character state (identity, motivations, emotions, relationships)\n"
-            "3) World/canon facts (bullet list)\n"
-            "4) Open threads and unresolved elements\n",
+            "Produce a summary with these sections:\n\n"
+            "## What happens\n"
+            "Dense narrative recap.\n\n"
+            "## Character state\n"
+            "Identity, motivations, emotions, relationships.\n\n"
+            "## World / canon facts\n"
+            "Bullet list.\n\n"
+            "## Open threads\n"
+            "Bullet list of unresolved elements.\n",
         ),
     ]
 )

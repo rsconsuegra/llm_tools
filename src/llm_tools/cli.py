@@ -3,6 +3,7 @@ from pathlib import Path
 import typer  # noqa: B008  (typer uses function calls as defaults by design)
 from langchain_core.documents import Document
 
+from llm_tools.config import DEFAULT_MODEL
 from llm_tools.io_.jsonl import save_docs_to_jsonl
 from llm_tools.parsers.silly_tavern import SillyTavernParser
 from llm_tools.pipelines.refine import refine_file
@@ -21,6 +22,7 @@ _concurrency = typer.Option(3, "--concurrency", help="Max concurrent LLM calls f
 _chunk_chars = typer.Option(5000, "--chunk-size", help="Characters per text chunk")
 _overlap = typer.Option(100, "--overlap", help="Character overlap between chunks")
 _context = typer.Option(None, "--context", help="Additional instructions for summarizer")
+_polish = typer.Option(False, "--polish", help="Refine session summary into polished prose")
 
 
 @app.command()
@@ -32,6 +34,7 @@ def summarize(
     character: str = _character,
     turns_per_chunk: int = _chunk_size,
     max_concurrency: int = _concurrency,
+    polish: bool = _polish,
 ):
     parser = _get_parser(format, character)
     session = parser.parse(chat_file)
@@ -44,7 +47,21 @@ def summarize(
         max_concurrency=max_concurrency,
     )
 
-    typer.echo(f"Generated {len(result.chunks)} memory chunks + session summary")
+    if polish:
+        from llm_tools.pipelines.refine import refine_text
+
+        polished = refine_text(
+            result.session_summary,
+            source=str(chat_file),
+            model=model,
+            context="Polish this session memory into coherent, readable prose",
+        )
+        result.session_summary = polished.summary
+        typer.echo(f"Generated {len(result.chunks)} chunks + polished session summary")
+    else:
+        typer.echo(f"Generated {len(result.chunks)} memory chunks + session summary")
+
+    model_name = model or DEFAULT_MODEL
 
     if output:
         docs = [
@@ -52,6 +69,7 @@ def summarize(
                 page_content=chunk.summary,
                 metadata={
                     "type": "memory_chunk",
+                    "model": model_name,
                     "chunk_id": chunk.chunk_id,
                     "turn_ids": chunk.turn_ids,
                     "prompt_context": chunk.prompt_context,
@@ -62,7 +80,11 @@ def summarize(
         docs.append(
             Document(
                 page_content=result.session_summary,
-                metadata={"type": "session_memory"},
+                metadata={
+                    "type": "session_memory",
+                    "model": model_name,
+                    "source_chunks": len(result.chunks),
+                },
             )
         )
         save_docs_to_jsonl(docs, str(output))
@@ -91,11 +113,13 @@ def refine(
     typer.echo(f"Refined {result.n_chunks} chunks from {text_file}")
 
     if output:
+        model_name = model or DEFAULT_MODEL
         docs = [
             Document(
                 page_content=result.summary,
                 metadata={
                     "type": "refined_summary",
+                    "model": model_name,
                     "source": result.source,
                     "n_chunks": result.n_chunks,
                     "chunk_size": result.chunk_size,

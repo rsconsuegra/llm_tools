@@ -1,10 +1,10 @@
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 
-from llm_tools.config import CHUNK_TURNS_DEFAULT
+from llm_tools.config import CHUNK_TURNS_DEFAULT, MAX_DIRECT_REDUCE_CHUNKS
 from llm_tools.llm import create_llm
 from llm_tools.models import ChatSession, MemoryChunk, SessionMemory
-from llm_tools.prompts.summarize import MAP_PROMPT, REDUCE_PROMPT
+from llm_tools.prompts.summarize import COLLAPSE_PROMPT, MAP_PROMPT, REDUCE_PROMPT
 
 
 def _group_turns(session: ChatSession, turns_per_chunk: int = CHUNK_TURNS_DEFAULT) -> list[list]:
@@ -35,6 +35,10 @@ def _turns_to_docs(groups: list[list]) -> list[Document]:
     return docs
 
 
+def _group_items(items: list, group_size: int = 8) -> list[list]:
+    return [items[i : i + group_size] for i in range(0, len(items), group_size)]
+
+
 def summarize_session(
     session: ChatSession,
     model: str | None = None,
@@ -46,6 +50,7 @@ def summarize_session(
 
     map_chain = MAP_PROMPT | llm | parser
     reduce_chain = REDUCE_PROMPT | llm | parser
+    collapse_chain = COLLAPSE_PROMPT | llm | parser
 
     groups = _group_turns(session, turns_per_chunk)
     docs = _turns_to_docs(groups)
@@ -73,11 +78,35 @@ def summarize_session(
         for doc, summary in zip(docs, map_outputs, strict=True)
     ]
 
-    chunk_summaries_text = "\n\n---\n\n".join(
-        f"[Chunk {m.chunk_id} | turns {m.turn_ids}]\n{m.summary}" for m in mapped_summaries
-    )
+    if len(mapped_summaries) > MAX_DIRECT_REDUCE_CHUNKS:
+        grouped = _group_items(mapped_summaries, group_size=8)
 
-    session_summary = reduce_chain.invoke({"chunk_summaries": chunk_summaries_text})
+        collapse_inputs = [
+            {
+                "chunk_summaries": "\n\n---\n\n".join(
+                    f"[Chunk {m.chunk_id} | turns {m.turn_ids}]\n{m.summary}"
+                    for m in group
+                )
+            }
+            for group in grouped
+        ]
+
+        collapsed_outputs = collapse_chain.batch(
+            collapse_inputs,
+            config={"max_concurrency": 2},
+        )
+
+        reduce_input_text = "\n\n---\n\n".join(
+            f"[Collapsed group {idx}]\n{summary}"
+            for idx, summary in enumerate(collapsed_outputs, start=1)
+        )
+    else:
+        reduce_input_text = "\n\n---\n\n".join(
+            f"[Chunk {m.chunk_id} | turns {m.turn_ids}]\n{m.summary}"
+            for m in mapped_summaries
+        )
+
+    session_summary = reduce_chain.invoke({"chunk_summaries": reduce_input_text})
 
     return SessionMemory(
         session_summary=session_summary,
