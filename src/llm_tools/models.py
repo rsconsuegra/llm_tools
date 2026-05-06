@@ -28,3 +28,13 @@ class SessionMemory(BaseModel):
     session_summary: str
     chunks: list[MemoryChunk]
     metadata: dict | None = None
+
+
+class TextSummary(BaseModel):
+    source: str
+    summary: str
+    n_chunks: int
+    chunk_size: int
+    chunk_overlap: int
+    context: str | None = None
+    metadata: dict | None = None

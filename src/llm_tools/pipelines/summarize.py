@@ -39,6 +39,7 @@ def summarize_session(
     session: ChatSession,
     model: str | None = None,
     turns_per_chunk: int = CHUNK_TURNS_DEFAULT,
+    max_concurrency: int = 3,
 ) -> SessionMemory:
     llm = create_llm(model=model)
     parser = StrOutputParser()
@@ -49,22 +50,28 @@ def summarize_session(
     groups = _group_turns(session, turns_per_chunk)
     docs = _turns_to_docs(groups)
 
-    mapped_summaries: list[MemoryChunk] = []
-    for d in docs:
-        summary = map_chain.invoke(
-            {
-                "prompt_context": d.metadata.get("prompt_context", ""),
-                "character_text": d.page_content,
-            }
+    map_inputs = [
+        {
+            "prompt_context": d.metadata.get("prompt_context", ""),
+            "character_text": d.page_content,
+        }
+        for d in docs
+    ]
+
+    map_outputs = map_chain.batch(
+        map_inputs,
+        config={"max_concurrency": max_concurrency},
+    )
+
+    mapped_summaries = [
+        MemoryChunk(
+            chunk_id=doc.metadata["chunk_id"],
+            turn_ids=doc.metadata["turn_ids"],
+            summary=summary,
+            prompt_context=doc.metadata.get("prompt_context", ""),
         )
-        mapped_summaries.append(
-            MemoryChunk(
-                chunk_id=d.metadata["chunk_id"],
-                turn_ids=d.metadata["turn_ids"],
-                summary=summary,
-                prompt_context=d.metadata.get("prompt_context", ""),
-            )
-        )
+        for doc, summary in zip(docs, map_outputs, strict=True)
+    ]
 
     chunk_summaries_text = "\n\n---\n\n".join(
         f"[Chunk {m.chunk_id} | turns {m.turn_ids}]\n{m.summary}" for m in mapped_summaries
