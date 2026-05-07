@@ -8,10 +8,7 @@ from llm_tools.prompts.summarize import COLLAPSE_PROMPT, MAP_PROMPT, REDUCE_PROM
 
 
 def _group_turns(session: ChatSession, turns_per_chunk: int = CHUNK_TURNS_DEFAULT) -> list[list]:
-    chunks = []
-    for i in range(0, len(session.turns), turns_per_chunk):
-        chunks.append(session.turns[i : i + turns_per_chunk])
-    return chunks
+    return _group_items(session.turns, turns_per_chunk)
 
 
 def _turns_to_docs(groups: list[list]) -> list[Document]:

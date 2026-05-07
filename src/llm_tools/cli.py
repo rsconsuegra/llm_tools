@@ -9,7 +9,7 @@ from llm_tools.parsers.silly_tavern import SillyTavernParser
 from llm_tools.pipelines.character_design import generate_character
 from llm_tools.pipelines.consistency import check_file_consistency
 from llm_tools.pipelines.memory import extract_character_state
-from llm_tools.pipelines.refine import refine_file
+from llm_tools.pipelines.refine import refine_file, refine_text
 from llm_tools.pipelines.summarize import summarize_session
 
 app = typer.Typer(help="LLM-powered pipelines for CYOA narrative tooling")
@@ -29,6 +29,19 @@ _overlap = typer.Option(100, "--overlap", help="Character overlap between chunks
 _context = typer.Option(None, "--context", help="Additional instructions for summarizer")
 _polish = typer.Option(False, "--polish", help="Refine session summary into polished prose")
 _norms = typer.Option(..., exists=True, help="Path to norms/rules document")
+
+
+def _resolve_model_name(model: str | None) -> str:
+    return model or DEFAULT_MODEL
+
+
+def _output_results(docs: list[Document], output: Path | None, model_name: str) -> None:
+    if output:
+        save_docs_to_jsonl(docs, str(output))
+        typer.echo(f"Saved to {output}")
+    else:
+        for doc in docs:
+            typer.echo(doc.page_content)
 
 
 @app.command()
@@ -54,8 +67,6 @@ def summarize(
     )
 
     if polish:
-        from llm_tools.pipelines.refine import refine_text
-
         polished = refine_text(
             result.session_summary,
             source=str(chat_file),
@@ -67,37 +78,31 @@ def summarize(
     else:
         typer.echo(f"Generated {len(result.chunks)} memory chunks + session summary")
 
-    model_name = model or DEFAULT_MODEL
-
-    if output:
-        docs = [
-            Document(
-                page_content=chunk.summary,
-                metadata={
-                    "type": "memory_chunk",
-                    "model": model_name,
-                    "chunk_id": chunk.chunk_id,
-                    "turn_ids": chunk.turn_ids,
-                    "prompt_context": chunk.prompt_context,
-                },
-            )
-            for chunk in result.chunks
-        ]
-        docs.append(
-            Document(
-                page_content=result.session_summary,
-                metadata={
-                    "type": "session_memory",
-                    "model": model_name,
-                    "source_chunks": len(result.chunks),
-                },
-            )
+    model_name = _resolve_model_name(model)
+    docs = [
+        Document(
+            page_content=chunk.summary,
+            metadata={
+                "type": "memory_chunk",
+                "model": model_name,
+                "chunk_id": chunk.chunk_id,
+                "turn_ids": chunk.turn_ids,
+                "prompt_context": chunk.prompt_context,
+            },
         )
-        save_docs_to_jsonl(docs, str(output))
-        typer.echo(f"Saved to {output}")
-    else:
-        typer.echo("\n--- Session Summary ---\n")
-        typer.echo(result.session_summary)
+        for chunk in result.chunks
+    ]
+    docs.append(
+        Document(
+            page_content=result.session_summary,
+            metadata={
+                "type": "session_memory",
+                "model": model_name,
+                "source_chunks": len(result.chunks),
+            },
+        )
+    )
+    _output_results(docs, output, model_name)
 
 
 @app.command()
@@ -118,27 +123,22 @@ def refine(
     )
     typer.echo(f"Refined {result.n_chunks} chunks from {text_file}")
 
-    if output:
-        model_name = model or DEFAULT_MODEL
-        docs = [
-            Document(
-                page_content=result.summary,
-                metadata={
-                    "type": "refined_summary",
-                    "model": model_name,
-                    "source": result.source,
-                    "n_chunks": result.n_chunks,
-                    "chunk_size": result.chunk_size,
-                    "chunk_overlap": result.chunk_overlap,
-                    "context": result.context,
-                },
-            )
-        ]
-        save_docs_to_jsonl(docs, str(output))
-        typer.echo(f"Saved to {output}")
-    else:
-        typer.echo("\n--- Refined Summary ---\n")
-        typer.echo(result.summary)
+    model_name = _resolve_model_name(model)
+    docs = [
+        Document(
+            page_content=result.summary,
+            metadata={
+                "type": "refined_summary",
+                "model": model_name,
+                "source": result.source,
+                "n_chunks": result.n_chunks,
+                "chunk_size": result.chunk_size,
+                "chunk_overlap": result.chunk_overlap,
+                "context": result.context,
+            },
+        )
+    ]
+    _output_results(docs, output, model_name)
 
 
 @app.command()
@@ -154,26 +154,20 @@ def memory(
     typer.echo(f"Parsed {len(session.turns)} turns from {chat_file}")
 
     state = extract_character_state(session, character_name=character, model=model)
-
     typer.echo(f"Extracted state for {state.name}")
 
-    if output:
-        model_name = model or DEFAULT_MODEL
-        doc = Document(
-            page_content=state.model_dump_json(indent=2),
-            metadata={
-                "type": "character_state",
-                "model": model_name,
-                "character": state.name,
-                "source": str(chat_file),
-                "source_turns": state.source_turns,
-            },
-        )
-        save_docs_to_jsonl([doc], str(output))
-        typer.echo(f"Saved to {output}")
-    else:
-        typer.echo(f"\n--- Character State: {state.name} ---\n")
-        typer.echo(state.model_dump_json(indent=2))
+    model_name = _resolve_model_name(model)
+    doc = Document(
+        page_content=state.model_dump_json(indent=2),
+        metadata={
+            "type": "character_state",
+            "model": model_name,
+            "character": state.name,
+            "source": str(chat_file),
+            "source_turns": state.source_turns,
+        },
+    )
+    _output_results([doc], output, model_name)
 
 
 @app.command()
@@ -190,42 +184,31 @@ def check(
     n_obs = sum(1 for v in report.violations if v.severity == "observation")
     typer.echo(f"Found {n_violations} violations, {n_warnings} warnings, {n_obs} observations")
 
-    if output:
-        model_name = model or DEFAULT_MODEL
-        docs = [
-            Document(
-                page_content=v.model_dump_json(indent=2),
-                metadata={
-                    "type": "consistency_finding",
-                    "model": model_name,
-                    "severity": v.severity,
-                    "category": v.category,
-                    "source": report.source,
-                },
-            )
-            for v in report.violations
-        ]
-        docs.append(
-            Document(
-                page_content=report.summary,
-                metadata={
-                    "type": "consistency_summary",
-                    "model": model_name,
-                    "source": report.source,
-                },
-            )
+    model_name = _resolve_model_name(model)
+    docs = [
+        Document(
+            page_content=v.model_dump_json(indent=2),
+            metadata={
+                "type": "consistency_finding",
+                "model": model_name,
+                "severity": v.severity,
+                "category": v.category,
+                "source": report.source,
+            },
         )
-        save_docs_to_jsonl(docs, str(output))
-        typer.echo(f"Saved to {output}")
-    else:
-        typer.echo("\n--- Consistency Report ---\n")
-        typer.echo(report.summary)
-
-
-def _get_parser(format: str, character: str):
-    if format == "sillytavern":
-        return SillyTavernParser(character_name=character)
-    raise ValueError(f"Unknown format: {format}. Supported: sillytavern")
+        for v in report.violations
+    ]
+    docs.append(
+        Document(
+            page_content=report.summary,
+            metadata={
+                "type": "consistency_summary",
+                "model": model_name,
+                "source": report.source,
+            },
+        )
+    )
+    _output_results(docs, output, model_name)
 
 
 @generate_app.command("character")
@@ -237,18 +220,19 @@ def generate_character_cmd(
     design = generate_character(concept, model=model)
     typer.echo(f"Generated character: {design.name} ({design.role})")
 
-    if output:
-        model_name = model or DEFAULT_MODEL
-        doc = Document(
-            page_content=design.model_dump_json(indent=2),
-            metadata={
-                "type": "character_design",
-                "model": model_name,
-                "character": design.name,
-            },
-        )
-        save_docs_to_jsonl([doc], str(output))
-        typer.echo(f"Saved to {output}")
-    else:
-        typer.echo(f"\n--- {design.name} ---\n")
-        typer.echo(design.model_dump_json(indent=2))
+    model_name = _resolve_model_name(model)
+    doc = Document(
+        page_content=design.model_dump_json(indent=2),
+        metadata={
+            "type": "character_design",
+            "model": model_name,
+            "character": design.name,
+        },
+    )
+    _output_results([doc], output, model_name)
+
+
+def _get_parser(format: str, character: str):
+    if format == "sillytavern":
+        return SillyTavernParser(character_name=character)
+    raise ValueError(f"Unknown format: {format}. Supported: sillytavern")
