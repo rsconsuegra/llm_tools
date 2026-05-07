@@ -4,6 +4,7 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from llm_tools.config import (
     DEFAULT_MODEL,
+    MODELS,
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
     RATE_LIMIT_CHECK_INTERVAL,
@@ -13,6 +14,10 @@ from llm_tools.config import (
 )
 
 
+def _resolve_model(model: str) -> str:
+    return MODELS.get(model, model)
+
+
 def create_llm(
     model: str | None = None,
     api_key: str | None = None,
@@ -20,7 +25,7 @@ def create_llm(
     temperature: float = 0,
     with_retry: bool = True,
 ) -> BaseChatModel:
-    model = model or DEFAULT_MODEL
+    model = _resolve_model(model or DEFAULT_MODEL)
     api_key = api_key or OPENROUTER_API_KEY
     base_url = base_url or OPENROUTER_BASE_URL
 

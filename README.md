@@ -68,7 +68,8 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.13+.
 ```bash
 git clone https://github.com/rsconsuegra/llm_tools.git
 cd llm_tools
-uv sync
+uv sync --extra dev    # includes pytest, ruff
+uv sync                # runtime only (no dev tools)
 ```
 
 ## Configuration
@@ -81,12 +82,14 @@ OPENROUTER_KEY=sk-or-v1-...
 
 The project uses [OpenRouter](https://openrouter.ai/) as the LLM gateway. The default model is `nousresearch/hermes-3-llama-3.1-405b:free`.
 
-Model aliases are defined in `src/llm_tools/config.py`:
+Short aliases are available via `--model`:
 
-| Alias | Model |
+| Alias | Resolves to |
 |---|---|
 | `hermes-405b` | `nousresearch/hermes-3-llama-3.1-405b:free` |
 | `glm-4.5-air` | `z-ai/glm-4.5-air:free` |
+
+You can also pass the full model string directly. Aliases are defined in `src/llm_tools/config.py`.
 
 ## CLI Usage
 
@@ -94,7 +97,7 @@ Model aliases are defined in `src/llm_tools/config.py`:
 # Summarize a SillyTavern chat session (MapReduce)
 llm-tools summarize chat.jsonl -o memories.jsonl
 
-# Summarize with custom character name and model
+# Summarize with custom character name and model alias
 llm-tools summarize chat.jsonl -c Lunessa -m glm-4.5-air -o memories.jsonl
 
 # Summarize and polish into readable prose
@@ -119,7 +122,7 @@ llm-tools refine prologue.md --context "Character backstory"
 |---|---|---|
 | `--format`, `-f` | `sillytavern` | Chat export format (`sillytavern` \| `openwebui`) |
 | `--output`, `-o` | stdout | Output JSONL path |
-| `--model`, `-m` | `hermes-405b` | LLM model name or alias |
+| `--model`, `-m` | `hermes-405b` | LLM model alias or full model string |
 | `--character`, `-c` | `Miah` | Character name in chat |
 | `--chunk-size` | `4` | Turns per map chunk |
 | `--concurrency` | `3` | Max concurrent LLM calls |
@@ -130,7 +133,7 @@ llm-tools refine prologue.md --context "Character backstory"
 | Flag | Default | Description |
 |---|---|---|
 | `--output`, `-o` | stdout | Output JSONL path |
-| `--model`, `-m` | `hermes-405b` | LLM model name or alias |
+| `--model`, `-m` | `hermes-405b` | LLM model alias or full model string |
 | `--chunk-size` | `5000` | Characters per text chunk |
 | `--overlap` | `100` | Character overlap between chunks |
 | `--context` | none | Additional instructions for summarizer |
@@ -157,8 +160,8 @@ print(summary.summary)
 ```
 src/llm_tools/
 ├── config.py          # Env vars, model registry, defaults
-├── llm.py             # LLM factory (rate limiter + retry)
-├── models.py          # Pydantic models: Turn, ChatSession, MemoryChunk, etc.
+├── llm.py             # LLM factory (alias resolution, rate limiter, retry)
+├── models.py          # Pydantic models: Turn, ChatSession, MemoryChunk, TextSummary
 ├── cli.py             # Typer CLI (summarize + refine commands)
 ├── parsers/
 │   ├── base.py        # Abstract parser protocol
@@ -167,20 +170,35 @@ src/llm_tools/
 ├── pipelines/
 │   ├── summarize.py   # MapReduce with optional collapse
 │   ├── refine.py      # Sequential refinement
+│   ├── memory.py      # Stub
 │   └── consistency.py # Stub
 ├── prompts/
 │   ├── summarize.py   # MAP, COLLAPSE, REDUCE prompts
 │   ├── refine.py      # REFINE_INITIAL, REFINE prompts
+│   ├── memory.py      # Stub
 │   └── consistency.py # Stub
 └── io_/
-    └── jsonl.py       # JSONL read/write for Documents
+    ├── __init__.py    # Re-exports jsonl helpers
+    └── jsonl.py       # JSONL read/write for LangChain Documents
+notebooks/              # Original prototype notebooks
+├── Summarize_MapReduce.ipynb
+├── TesPrologue.ipynb
+└── Untitled.ipynb
+tests/                  # 15 tests
+├── conftest.py         # Shared fixtures (sample SillyTavern JSONL)
+├── test_llm.py         # Alias resolution tests
+├── test_parsers/
+│   └── test_silly_tavern.py
+└── test_pipelines/
+    ├── test_refine.py
+    └── test_summarize.py
 ```
 
 ## Development
 
 ```bash
-make install     # Install dependencies
-make test        # Run tests
+make install     # Install all dependencies (including dev)
+make test        # Run 15 tests with verbose output
 make lint        # Check with ruff
 make lint-fix    # Auto-fix lint issues
 make run         # Show CLI help
