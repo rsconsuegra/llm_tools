@@ -70,3 +70,17 @@ class ConsistencyReport(BaseModel):
     violations: list[ConsistencyViolation]
     summary: str
     metadata: dict | None = None
+
+
+class CharacterDesign(BaseModel):
+    name: str
+    role: str
+    age: str
+    appearance: str
+    personality: str
+    backstory: str
+    motivations: str
+    voice: str
+    arc: str
+    aliases: list[str] = []
+    tags: list[str] = []

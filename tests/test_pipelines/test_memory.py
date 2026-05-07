@@ -1,12 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 from llm_tools.models import CharacterState
-from llm_tools.pipelines.memory import (
-    _extract_list,
-    _extract_relationships,
-    _extract_section,
-    extract_character_state,
-)
+from llm_tools.parsers.markdown import extract_list, extract_section
+from llm_tools.pipelines.memory import _extract_relationships, extract_character_state
 
 SAMPLE_LLM_OUTPUT = """\
 ## Emotions
@@ -38,13 +34,13 @@ She started the session hesitant but found resolve after the battle at the gate.
 
 
 def test_extract_section():
-    result = _extract_section(SAMPLE_LLM_OUTPUT, "Arc notes")
+    result = extract_section(SAMPLE_LLM_OUTPUT, "Arc notes")
     assert "hesitant" in result
     assert "resolve" in result
 
 
 def test_extract_list():
-    emotions = _extract_list(SAMPLE_LLM_OUTPUT, "Emotions")
+    emotions = extract_list(SAMPLE_LLM_OUTPUT, "Emotions")
     assert "Anxious" in emotions
     assert "Determined" in emotions
 

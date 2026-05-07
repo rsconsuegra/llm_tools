@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 from llm_tools.models import ConsistencyReport
+from llm_tools.parsers.markdown import extract_section
 from llm_tools.pipelines.consistency import (
-    _extract_section,
     _parse_violations,
     check_consistency,
     check_file_consistency,
@@ -29,7 +29,7 @@ revisiting the chapter 2 reference.
 
 
 def test_extract_section():
-    result = _extract_section(SAMPLE_LLM_OUTPUT, "Overall assessment")
+    result = extract_section(SAMPLE_LLM_OUTPUT, "Overall assessment")
     assert "two clear violations" in result
 
 

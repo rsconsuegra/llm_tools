@@ -6,12 +6,15 @@ from langchain_core.documents import Document
 from llm_tools.config import DEFAULT_MODEL
 from llm_tools.io_.jsonl import save_docs_to_jsonl
 from llm_tools.parsers.silly_tavern import SillyTavernParser
+from llm_tools.pipelines.character_design import generate_character
 from llm_tools.pipelines.consistency import check_file_consistency
 from llm_tools.pipelines.memory import extract_character_state
 from llm_tools.pipelines.refine import refine_file
 from llm_tools.pipelines.summarize import summarize_session
 
 app = typer.Typer(help="LLM-powered pipelines for CYOA narrative tooling")
+generate_app = typer.Typer(help="Generate structured narrative content")
+app.add_typer(generate_app, name="generate")
 
 _chat_file = typer.Argument(..., exists=True, help="Path to chat export file")
 _text_file = typer.Argument(..., exists=True, help="Path to text/markdown file")
@@ -223,3 +226,29 @@ def _get_parser(format: str, character: str):
     if format == "sillytavern":
         return SillyTavernParser(character_name=character)
     raise ValueError(f"Unknown format: {format}. Supported: sillytavern")
+
+
+@generate_app.command("character")
+def generate_character_cmd(
+    concept: str = typer.Argument(..., help="Rough character concept description"),
+    output: Path | None = _output,
+    model: str | None = _model,
+):
+    design = generate_character(concept, model=model)
+    typer.echo(f"Generated character: {design.name} ({design.role})")
+
+    if output:
+        model_name = model or DEFAULT_MODEL
+        doc = Document(
+            page_content=design.model_dump_json(indent=2),
+            metadata={
+                "type": "character_design",
+                "model": model_name,
+                "character": design.name,
+            },
+        )
+        save_docs_to_jsonl([doc], str(output))
+        typer.echo(f"Saved to {output}")
+    else:
+        typer.echo(f"\n--- {design.name} ---\n")
+        typer.echo(design.model_dump_json(indent=2))

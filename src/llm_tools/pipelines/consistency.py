@@ -4,6 +4,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from llm_tools.llm import create_llm
 from llm_tools.models import ConsistencyReport, ConsistencyViolation
+from llm_tools.parsers.markdown import extract_section
 from llm_tools.prompts.consistency import CONSISTENCY_PROMPT
 
 
@@ -23,7 +24,7 @@ def check_consistency(
     observations = _parse_violations(output, "Observations", default_severity="observation")
 
     all_items = violations + warnings + observations
-    summary = _extract_section(output, "Overall assessment")
+    summary = extract_section(output, "Overall assessment")
 
     return ConsistencyReport(
         source=source,
@@ -42,27 +43,10 @@ def check_file_consistency(
     return check_consistency(content, norms, source=str(content_file), model=model)
 
 
-def _extract_section(text: str, header: str) -> str:
-    lines = text.split("\n")
-    capturing = False
-    result: list[str] = []
-
-    for line in lines:
-        if line.strip().startswith(f"## {header}"):
-            capturing = True
-            continue
-        if capturing and line.strip().startswith("## "):
-            break
-        if capturing:
-            result.append(line)
-
-    return "\n".join(result).strip()
-
-
 def _parse_violations(
     text: str, header: str, default_severity: str | None = None
 ) -> list[ConsistencyViolation]:
-    section = _extract_section(text, header)
+    section = extract_section(text, header)
     if not section:
         return []
 
