@@ -38,3 +38,35 @@ class TextSummary(BaseModel):
     chunk_overlap: int
     context: str | None = None
     metadata: dict | None = None
+
+
+class CharacterRelationship(BaseModel):
+    character: str
+    type: str
+    notes: str | None = None
+
+
+class CharacterState(BaseModel):
+    name: str
+    emotions: list[str]
+    motivations: list[str]
+    secrets: list[str]
+    relationships: list[CharacterRelationship]
+    arc_notes: str
+    open_threads: list[str]
+    source_turns: list[int]
+
+
+class ConsistencyViolation(BaseModel):
+    category: str
+    severity: str
+    description: str
+    quote: str | None = None
+    suggestion: str | None = None
+
+
+class ConsistencyReport(BaseModel):
+    source: str
+    violations: list[ConsistencyViolation]
+    summary: str
+    metadata: dict | None = None

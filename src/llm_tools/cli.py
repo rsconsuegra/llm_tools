@@ -6,6 +6,8 @@ from langchain_core.documents import Document
 from llm_tools.config import DEFAULT_MODEL
 from llm_tools.io_.jsonl import save_docs_to_jsonl
 from llm_tools.parsers.silly_tavern import SillyTavernParser
+from llm_tools.pipelines.consistency import check_file_consistency
+from llm_tools.pipelines.memory import extract_character_state
 from llm_tools.pipelines.refine import refine_file
 from llm_tools.pipelines.summarize import summarize_session
 
@@ -23,6 +25,7 @@ _chunk_chars = typer.Option(5000, "--chunk-size", help="Characters per text chun
 _overlap = typer.Option(100, "--overlap", help="Character overlap between chunks")
 _context = typer.Option(None, "--context", help="Additional instructions for summarizer")
 _polish = typer.Option(False, "--polish", help="Refine session summary into polished prose")
+_norms = typer.Option(..., exists=True, help="Path to norms/rules document")
 
 
 @app.command()
@@ -133,6 +136,87 @@ def refine(
     else:
         typer.echo("\n--- Refined Summary ---\n")
         typer.echo(result.summary)
+
+
+@app.command()
+def memory(
+    chat_file: Path = _chat_file,
+    character: str = _character,
+    format: str = _format,
+    output: Path | None = _output,
+    model: str | None = _model,
+):
+    parser = _get_parser(format, character)
+    session = parser.parse(chat_file)
+    typer.echo(f"Parsed {len(session.turns)} turns from {chat_file}")
+
+    state = extract_character_state(session, character_name=character, model=model)
+
+    typer.echo(f"Extracted state for {state.name}")
+
+    if output:
+        model_name = model or DEFAULT_MODEL
+        doc = Document(
+            page_content=state.model_dump_json(indent=2),
+            metadata={
+                "type": "character_state",
+                "model": model_name,
+                "character": state.name,
+                "source": str(chat_file),
+                "source_turns": state.source_turns,
+            },
+        )
+        save_docs_to_jsonl([doc], str(output))
+        typer.echo(f"Saved to {output}")
+    else:
+        typer.echo(f"\n--- Character State: {state.name} ---\n")
+        typer.echo(state.model_dump_json(indent=2))
+
+
+@app.command()
+def check(
+    text_file: Path = _text_file,
+    norms: Path = _norms,
+    output: Path | None = _output,
+    model: str | None = _model,
+):
+    report = check_file_consistency(text_file, norms, model=model)
+
+    n_violations = sum(1 for v in report.violations if v.severity == "violation")
+    n_warnings = sum(1 for v in report.violations if v.severity == "warning")
+    n_obs = sum(1 for v in report.violations if v.severity == "observation")
+    typer.echo(f"Found {n_violations} violations, {n_warnings} warnings, {n_obs} observations")
+
+    if output:
+        model_name = model or DEFAULT_MODEL
+        docs = [
+            Document(
+                page_content=v.model_dump_json(indent=2),
+                metadata={
+                    "type": "consistency_finding",
+                    "model": model_name,
+                    "severity": v.severity,
+                    "category": v.category,
+                    "source": report.source,
+                },
+            )
+            for v in report.violations
+        ]
+        docs.append(
+            Document(
+                page_content=report.summary,
+                metadata={
+                    "type": "consistency_summary",
+                    "model": model_name,
+                    "source": report.source,
+                },
+            )
+        )
+        save_docs_to_jsonl(docs, str(output))
+        typer.echo(f"Saved to {output}")
+    else:
+        typer.echo("\n--- Consistency Report ---\n")
+        typer.echo(report.summary)
 
 
 def _get_parser(format: str, character: str):
