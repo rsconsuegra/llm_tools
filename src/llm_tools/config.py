@@ -16,6 +16,7 @@ DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b:free"
 MODELS = {
     "hermes-405b": "nousresearch/hermes-3-llama-3.1-405b:free",
     "glm-4.5-air": "z-ai/glm-4.5-air:free",
+    "minimax-m2.5": "minimax/minimax-m2.5:free",
 }
 
 RATE_LIMIT_RPS = 0.2
