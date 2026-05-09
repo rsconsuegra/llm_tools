@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from llm_tools.llm import create_llm
@@ -15,12 +16,17 @@ def refine_text(
     chunk_size: int = 5000,
     chunk_overlap: int = 100,
     context: str | None = None,
+    prompts: dict[str, ChatPromptTemplate] | None = None,
 ) -> TextSummary:
+    p = prompts or {}
+    _initial = p.get("refine-initial") or REFINE_INITIAL_PROMPT
+    _refine = p.get("refine") or REFINE_PROMPT
+
     llm = create_llm(model=model)
     parser = StrOutputParser()
 
-    initial_chain = REFINE_INITIAL_PROMPT | llm | parser
-    refine_chain = REFINE_PROMPT | llm | parser
+    initial_chain = _initial | llm | parser
+    refine_chain = _refine | llm | parser
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,

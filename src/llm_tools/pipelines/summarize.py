@@ -1,5 +1,6 @@
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 from llm_tools.config import CHUNK_TURNS_DEFAULT, MAX_DIRECT_REDUCE_CHUNKS
 from llm_tools.llm import create_llm
@@ -41,13 +42,19 @@ def summarize_session(
     model: str | None = None,
     turns_per_chunk: int = CHUNK_TURNS_DEFAULT,
     max_concurrency: int = 3,
+    prompts: dict[str, ChatPromptTemplate] | None = None,
 ) -> SessionMemory:
+    p = prompts or {}
+    _map = p.get("summarize-map") or MAP_PROMPT
+    _collapse = p.get("summarize-collapse") or COLLAPSE_PROMPT
+    _reduce = p.get("summarize-reduce") or REDUCE_PROMPT
+
     llm = create_llm(model=model)
     parser = StrOutputParser()
 
-    map_chain = MAP_PROMPT | llm | parser
-    reduce_chain = REDUCE_PROMPT | llm | parser
-    collapse_chain = COLLAPSE_PROMPT | llm | parser
+    map_chain = _map | llm | parser
+    reduce_chain = _reduce | llm | parser
+    collapse_chain = _collapse | llm | parser
 
     groups = _group_turns(session, turns_per_chunk)
     docs = _turns_to_docs(groups)

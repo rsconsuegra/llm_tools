@@ -1,4 +1,5 @@
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 from llm_tools.llm import create_llm
 from llm_tools.models import CharacterDesign
@@ -9,9 +10,11 @@ from llm_tools.prompts.character_design import CHARACTER_DESIGN_PROMPT
 def generate_character(
     concept: str,
     model: str | None = None,
+    prompts: dict[str, ChatPromptTemplate] | None = None,
 ) -> CharacterDesign:
+    _prompt = (prompts or {}).get("character-design") or CHARACTER_DESIGN_PROMPT
     llm = create_llm(model=model)
-    chain = CHARACTER_DESIGN_PROMPT | llm | StrOutputParser()
+    chain = _prompt | llm | StrOutputParser()
     output = chain.invoke({"concept": concept})
 
     name_raw = extract_section(output, "Name")

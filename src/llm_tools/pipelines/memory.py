@@ -1,4 +1,5 @@
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 from llm_tools.llm import create_llm
 from llm_tools.models import CharacterRelationship, CharacterState, ChatSession
@@ -10,10 +11,12 @@ def extract_character_state(
     session: ChatSession,
     character_name: str | None = None,
     model: str | None = None,
+    prompts: dict[str, ChatPromptTemplate] | None = None,
 ) -> CharacterState:
     name = character_name or session.character_name or "Miah"
+    _prompt = (prompts or {}).get("memory") or CHARACTER_MEMORY_PROMPT
     llm = create_llm(model=model)
-    chain = CHARACTER_MEMORY_PROMPT | llm | StrOutputParser()
+    chain = _prompt | llm | StrOutputParser()
 
     prompt_parts = [f"[Turn {t.turn_id}] {t.prompt}" for t in session.turns if t.prompt]
 

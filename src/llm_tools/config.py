@@ -7,6 +7,10 @@ load_dotenv()
 OPENROUTER_API_KEY = getenv("OPENROUTER_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+AGENTA_HOST = getenv("AGENTA_HOST", "")
+AGENTA_API_KEY = getenv("AGENTA_API_KEY", "")
+AGENTA_ENABLED = bool(AGENTA_HOST and AGENTA_API_KEY)
+
 DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b:free"
 
 MODELS = {

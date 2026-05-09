@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 from llm_tools.llm import create_llm
 from llm_tools.models import ConsistencyReport, ConsistencyViolation
@@ -13,9 +14,11 @@ def check_consistency(
     norms: str,
     source: str = "",
     model: str | None = None,
+    prompts: dict[str, ChatPromptTemplate] | None = None,
 ) -> ConsistencyReport:
+    _prompt = (prompts or {}).get("consistency") or CONSISTENCY_PROMPT
     llm = create_llm(model=model)
-    chain = CONSISTENCY_PROMPT | llm | StrOutputParser()
+    chain = _prompt | llm | StrOutputParser()
 
     output = chain.invoke({"content": content, "norms": norms})
 
@@ -37,10 +40,11 @@ def check_file_consistency(
     content_file: Path | str,
     norms_file: Path | str,
     model: str | None = None,
+    prompts: dict[str, ChatPromptTemplate] | None = None,
 ) -> ConsistencyReport:
     content = Path(content_file).read_text(encoding="utf-8")
     norms = Path(norms_file).read_text(encoding="utf-8")
-    return check_consistency(content, norms, source=str(content_file), model=model)
+    return check_consistency(content, norms, source=str(content_file), model=model, prompts=prompts)
 
 
 def _parse_violations(
